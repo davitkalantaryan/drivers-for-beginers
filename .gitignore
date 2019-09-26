@@ -1,0 +1,9 @@
+
+*.[oa]
+*.cmd
+/prj/*/*_mkfl/.tmp_versions
+*.cache.mk
+Module.symvers
+modules.order
+*.mod.c
+
