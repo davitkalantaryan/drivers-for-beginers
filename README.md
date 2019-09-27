@@ -7,3 +7,4 @@
 
 ## Usefull links  
   1. [github](https://github.com/davitkalantaryan/drivers-for-beginers)  
+  2. [web](https://davitkalantaryan.github.io/drivers-for-beginers/)  
