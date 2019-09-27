@@ -10,4 +10,5 @@ SUBDIRS +=	    \
 
 OTHER_FILES +=	    \
     $${PWD}/../../README.md								\
-    $${PWD}/../../.gitignore
+    $${PWD}/../../.gitignore								\
+    $${PWD}/../../index.html
