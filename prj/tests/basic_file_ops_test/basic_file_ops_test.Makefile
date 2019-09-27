@@ -5,7 +5,7 @@
 # This Makefile can be used to create hello world LINUX test driver
 #
 
-MODULE_NAME		:= mtcagen
+MODULE_NAME		:= basic_file_ops_test
 
 mkfile_path		:= $(abspath $(lastword $(MAKEFILE_LIST)))
 mkfile_dir		:= $(dir $(mkfile_path))
@@ -18,7 +18,7 @@ KO_FILES		:= $(mkfile_dir)../../../../sys/driver/$(LINUX_CODE)_$(KVERSION)
 
 
 OBJECT_FILES	:=		\
-	$(SRC_DIR)/tests/drventry_hello_world_test.o
+	$(SRC_DIR)/tests/drventry_basic_file_ops_test.o
 
 
 $(MODULE_NAME)-objs := $(OBJECT_FILES)

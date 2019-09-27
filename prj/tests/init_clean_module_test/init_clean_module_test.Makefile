@@ -5,7 +5,7 @@
 # This Makefile can be used to create hello world LINUX test driver
 #
 
-MODULE_NAME		:= mtcagen
+MODULE_NAME		:= init_clean_module_test
 
 mkfile_path		:= $(abspath $(lastword $(MAKEFILE_LIST)))
 mkfile_dir		:= $(dir $(mkfile_path))
