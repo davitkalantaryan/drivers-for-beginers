@@ -5,13 +5,13 @@
 
 static int __init hello_world_test_init_module(void)
 {
-	pr_notice("hello world!\n");
+	pr_notice("Initing module!\n");
 	return 0;
 }
 
 static void __exit hello_world_test_cleanup_module(void)
 {
-	pr_notice("Exit called!\n");
+	pr_notice("Cleaning moule!\n");
 }
 
 

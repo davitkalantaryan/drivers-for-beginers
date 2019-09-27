@@ -1,7 +1,12 @@
 
 *.[oa]
 *.cmd
-/prj/*/*_mkfl/.tmp_versions
+/prj/*/*/*
+!/prj/*/*/*.Makefile
+!/prj/*/*/Makefile
+!/prj/*/*/*.pro
+/workspaces/*/*
+!/workspaces/*_qt/*.pro
 *.cache.mk
 Module.symvers
 modules.order

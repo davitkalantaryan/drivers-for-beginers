@@ -18,21 +18,23 @@ KO_FILES		:= $(mkfile_dir)../../../../sys/driver/$(LINUX_CODE)_$(KVERSION)
 
 
 OBJECT_FILES	:=		\
-	$(SRC_DIR)/tests/drventry_hello_world_test.o
+	$(SRC_DIR)/tests/drventry_init_clean_module_test.o
 
 
 $(MODULE_NAME)-objs := $(OBJECT_FILES)
 
 obj-m			:= $(MODULE_NAME).o
 
-default: compile
+default: compile  
 
 echos:
 	@echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!mkfile_dir="$(mkfile_dir)
+	@echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!mkfile_path="$(mkfile_path)
 
 
 compile:
 	#cp $(KO_FILES)/Module.symvers.upciedev Module.symvers
+	cp $(mkfile_path) $(mkfile_dir)Makefile
 	make -C /lib/modules/$(KVERSION)/build M=$(PWD) modules
 	mkdir -p $(KO_FILES)
 	cp Module.symvers $(KO_FILES)/Module.symvers.$(MODULE_NAME)
@@ -44,6 +46,7 @@ clean:
 	rm -f $(KO_FILES)/$(MODULE_NAME).ko
 	rm -f $(KO_FILES)/Module.symvers.$(MODULE_NAME)
 	test ! -d /lib/modules/$(KVERSION) || make -C /lib/modules/$(KVERSION)/build M=$(PWD) clean
+	rm -rf $(mkfile_dir)Makefile
 	
 	
 EXTRA_CFLAGS	+= -DUSE_SEMAPHORE -I$(PWD)/../../../src/driver/include -I$(PWD)/../../../include/mtsys
