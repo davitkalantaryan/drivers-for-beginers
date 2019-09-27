@@ -9,9 +9,12 @@
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("DAVIT KALANTARYAN");
 
-#define DEVICE_MAJOR_NUMBER				255
 #define DEVICE_MINOR_NUMBER				0
 #define	DRV_AND_DEVICE_ENTRY_NAME		"basic_file_ops_test"
+
+struct SDeviceStruct{
+	struct cdev		m_cdev;
+}static s_deviceStruct;
 
 static int SimpleOpen (struct inode * a_in, struct file * a_fp);
 static int SimpleOpenRelease (struct inode * a_in, struct file * a_fp);
@@ -19,7 +22,7 @@ static ssize_t SimpleRead(struct file * a_fp, char __user * a_userBuffer, size_t
 static ssize_t SimpleWrite (struct file * a_fp, const char __user * a_userBuffer, size_t a_size, loff_t * a_pOff);
 static long SimpleIoctl (struct file * a_fp, unsigned int a_code, unsigned long a_agument);
 
-static struct cdev		s_localCdev;
+static int				s_nMajorNumber = -1;
 static struct class*	s_class = NULL;
 static struct device*	s_pDevice = NULL;
 static int				s_cdevAdded = 0;
@@ -37,14 +40,16 @@ static const struct file_operations s_file_operations = {
 
 static int SimpleOpen (struct inode * a_in, struct file * a_fp)
 {
-	pr_notice("inode=%p, fp=%p, privateData=%p\n",a_in,a_fp,a_fp->private_data);
+	struct SDeviceStruct* dev = container_of(a_in->i_cdev, struct SDeviceStruct, m_cdev);
+	pr_notice("inode=%p, fp=%p, privateData=%p, devPtr=%p\n",a_in,a_fp,a_fp->private_data,dev);
+	a_fp->private_data = dev;
 	return 0;
 }
 
 
 static int SimpleOpenRelease (struct inode * a_in, struct file * a_fp)
 {
-	pr_notice("inode=%p, fp=%p, privateData=%p\n",a_in,a_fp,a_fp->private_data);
+	pr_notice("inode=%p, fp=%p, privateData=%p, drvData=%p\n",a_in,a_fp,a_fp->private_data,dev_get_drvdata(s_pDevice));
 	return 0;
 }
 
@@ -73,14 +78,14 @@ static long SimpleIoctl (struct file * a_fp, unsigned int a_code, unsigned long 
 static void CleanupModulePrivate(void)
 {
 	if(s_pDevice && (!IS_ERR(s_pDevice))){
-		device_destroy(s_class, MKDEV(DEVICE_MAJOR_NUMBER,DEVICE_MINOR_NUMBER));
+		device_destroy(s_class, MKDEV(s_nMajorNumber,DEVICE_MINOR_NUMBER));
 		//put_device(s_pDevice);
 		//device_unregister(s_pDevice);
 		s_pDevice = NULL;
 	}
 	
 	if(s_cdevAdded){
-		cdev_del(&s_localCdev);
+		cdev_del(&s_deviceStruct.m_cdev);
 		s_cdevAdded = 0;
 	}
 	
@@ -88,34 +93,47 @@ static void CleanupModulePrivate(void)
 		class_destroy(s_class);
 		s_class = NULL;
 	}
+	
+	if(s_nMajorNumber>=0){
+		unregister_chrdev(s_nMajorNumber,DRV_AND_DEVICE_ENTRY_NAME);
+		s_nMajorNumber = -1;
+	}
 }
 
 
 static int __init hello_world_test_init_module(void)
 {
 	int result;
-	pr_notice("Initing module!\n");
+	pr_notice("Initing module &s_deviceStruct = %p, version 4!\n",&s_deviceStruct);
+	
+	s_nMajorNumber = register_chrdev(0,DRV_AND_DEVICE_ENTRY_NAME,&s_file_operations);
+	if (s_nMajorNumber < 0) {
+		pr_err( "scull: can't get major %d\n",s_nMajorNumber);
+		return 1;
+	}
+	pr_notice("MajorNumber = %d\n",s_nMajorNumber);
 	
 	s_class = class_create(THIS_MODULE, DRV_AND_DEVICE_ENTRY_NAME);	
 	if(IS_ERR(s_class)){
 		CleanupModulePrivate();
-		return 1;
+		return 2;
 	}
 	
-	cdev_init(&s_localCdev,&s_file_operations);	
-	result = cdev_add(&s_localCdev,DEVICE_MAJOR_NUMBER,DEVICE_MINOR_NUMBER);
+	cdev_init(&s_deviceStruct.m_cdev,&s_file_operations);	
+	//s_localCdev.ops = &s_file_operations;
+	result = cdev_add(&s_deviceStruct.m_cdev,s_nMajorNumber,DEVICE_MINOR_NUMBER);
 	if (result){
+		pr_err("Adding error(%d) devno:%d for slot:%dd\n", result, s_nMajorNumber, DEVICE_MINOR_NUMBER);
 		CleanupModulePrivate();
-		pr_err("Adding error(%d) devno:%d for slot:%dd\n", result, DEVICE_MAJOR_NUMBER, DEVICE_MINOR_NUMBER);
-		return 2;
+		return 3;
 	}
 	s_cdevAdded = 1;
 	
-	s_pDevice = device_create(s_class, NULL, MKDEV(DEVICE_MAJOR_NUMBER,DEVICE_MINOR_NUMBER),(void*)0x1,DRV_AND_DEVICE_ENTRY_NAME);
+	s_pDevice = device_create(s_class, NULL, MKDEV(s_nMajorNumber,DEVICE_MINOR_NUMBER),(void*)0x1,DRV_AND_DEVICE_ENTRY_NAME);
 	if (IS_ERR(s_pDevice)){
 		pr_err("Device creation error!\n");
 		CleanupModulePrivate();
-		return 3;
+		return 4;
 	}
 	
 	return 0;

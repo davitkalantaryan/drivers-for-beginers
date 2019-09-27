@@ -3,7 +3,7 @@
 *.cmd
 /prj/*/*/*
 !/prj/*/*/*.Makefile
-!/prj/*/*/Makefile
+#!/prj/*/*/Makefile
 !/prj/*/*/*.pro
 /workspaces/*/*
 !/workspaces/*_qt/*.pro
