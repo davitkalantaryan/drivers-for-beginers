@@ -1,8 +1,6 @@
 
 TEMPLATE = aux
-
 DEFINES += __KERNEL__
-
 CONFIG -= app_bundle
 CONFIG -= qt
 

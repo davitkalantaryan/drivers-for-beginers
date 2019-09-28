@@ -5,6 +5,7 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>   // for cdev_...
 #include <linux/device.h>  // for class_create
+#include <usr/user_space_fs_drv_user.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("DAVIT KALANTARYAN");
