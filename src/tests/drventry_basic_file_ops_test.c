@@ -22,7 +22,7 @@ static ssize_t SimpleRead(struct file * a_fp, char __user * a_userBuffer, size_t
 static ssize_t SimpleWrite (struct file * a_fp, const char __user * a_userBuffer, size_t a_size, loff_t * a_pOff);
 static long SimpleIoctl (struct file * a_fp, unsigned int a_code, unsigned long a_agument);
 
-static int				s_nMajorNumber = -1;
+static dev_t			s_deviceNumber = -1;
 static struct class*	s_class = NULL;
 static struct device*	s_pDevice = NULL;
 static int				s_cdevAdded = 0;
@@ -80,7 +80,8 @@ static long SimpleIoctl (struct file * a_fp, unsigned int a_code, unsigned long 
 static void CleanupModulePrivate(void)
 {
 	if(s_pDevice && (!IS_ERR(s_pDevice))){
-		device_destroy(s_class, MKDEV(s_nMajorNumber,DEVICE_MINOR_NUMBER));
+		//device_destroy(s_class, MKDEV(s_nMajorNumber,DEVICE_MINOR_NUMBER)); // s_deviceNumber
+		device_destroy(s_class, s_deviceNumber);
 		//put_device(s_pDevice);
 		//device_unregister(s_pDevice);
 		s_pDevice = NULL;
@@ -96,24 +97,28 @@ static void CleanupModulePrivate(void)
 		s_class = NULL;
 	}
 	
-	if(s_nMajorNumber>=0){
-		unregister_chrdev(s_nMajorNumber,DRV_AND_DEVICE_ENTRY_NAME);
-		s_nMajorNumber = -1;
+	if(s_deviceNumber>=0){
+		//unregister_chrdev(s_nMajorNumber,DRV_AND_DEVICE_ENTRY_NAME);
+		unregister_chrdev_region(s_deviceNumber,1);
+		s_deviceNumber = -1;
 	}
 }
 
 
 static int __init hello_world_test_init_module(void)
 {
+	dev_t firstdev;
 	int result;
 	pr_notice("basic_file_ops_test: version 5. Initing module (&s_deviceStruct=%p, &cdev=%p)\n",&s_deviceStruct,&s_deviceStruct.m_cdev);
 	
-	s_nMajorNumber = register_chrdev(0,DRV_AND_DEVICE_ENTRY_NAME,&s_file_operations);
-	if (s_nMajorNumber < 0) {
-		pr_err( "scull: can't get major %d\n",s_nMajorNumber);
+	//s_nMajorNumber = register_chrdev(0,DRV_AND_DEVICE_ENTRY_NAME,&s_file_operations);
+	result = alloc_chrdev_region(&firstdev,DEVICE_MINOR_NUMBER,1,DRV_AND_DEVICE_ENTRY_NAME);
+	if (result < 0) {
+		pr_err( "scull: can't get major %d\n",result);
 		return 1;
 	}
-	pr_notice("MajorNumber = %d\n",s_nMajorNumber);
+	s_deviceNumber = firstdev;
+	pr_notice("Major=%u, Minor=%u\n",MAJOR(s_deviceNumber),MINOR(s_deviceNumber));
 	
 	s_class = class_create(THIS_MODULE, DRV_AND_DEVICE_ENTRY_NAME);	
 	if(IS_ERR(s_class)){
@@ -122,15 +127,17 @@ static int __init hello_world_test_init_module(void)
 	}
 	
 	cdev_init(&s_deviceStruct.m_cdev,&s_file_operations);	
-	result = cdev_add(&s_deviceStruct.m_cdev,MKDEV(s_nMajorNumber,DEVICE_MINOR_NUMBER),1);
+	//result = cdev_add(&s_deviceStruct.m_cdev,MKDEV(s_nMajorNumber,DEVICE_MINOR_NUMBER),1);
+	result = cdev_add(&s_deviceStruct.m_cdev,s_deviceNumber,1);
 	if (result){
-		pr_err("Adding error(%d) devno:%d for slot:%dd\n", result, s_nMajorNumber, DEVICE_MINOR_NUMBER);
+		pr_err("Adding error(%d) (Major=%u, Minor=%u) \n", result, MAJOR(s_deviceNumber),MINOR(s_deviceNumber));
 		CleanupModulePrivate();
 		return 3;
 	}
 	s_cdevAdded = 1;
 	
-	s_pDevice = device_create(s_class, NULL, MKDEV(s_nMajorNumber,DEVICE_MINOR_NUMBER),(void*)0x1,DRV_AND_DEVICE_ENTRY_NAME);
+	//s_pDevice = device_create(s_class, NULL, MKDEV(s_nMajorNumber,DEVICE_MINOR_NUMBER),(void*)0x1,DRV_AND_DEVICE_ENTRY_NAME);
+	s_pDevice = device_create(s_class, NULL, s_deviceNumber,(void*)0x1,DRV_AND_DEVICE_ENTRY_NAME);
 	if (IS_ERR(s_pDevice)){
 		pr_err("Device creation error!\n");
 		CleanupModulePrivate();

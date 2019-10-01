@@ -1,0 +1,5 @@
+# insert this to the /etc/udev/rules.d  
+# then call $sudo udevadm control --reload
+#
+# ACTION=="add", DRIVER=="user_space_fs", MODE:="0666"
+ACTION=="add", MODE:="0666"

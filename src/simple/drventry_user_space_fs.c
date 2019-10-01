@@ -3,28 +3,27 @@
 #include <linux/module.h>  // For module_init, module_exit
 #include <linux/printk.h>
 #include <linux/fs.h>
-#include <linux/cdev.h>   // for cdev_...
 #include <linux/device.h>  // for class_create
 #include <usr/user_space_fs_drv_user.h>
+#include <kernel/user_space_fs_drv_kernel.h>
+#include <linux/atomic.h>						// for atomic_inc_return()
+#include <asm/uaccess.h>				// for strncpy_from_user
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("DAVIT KALANTARYAN");
 
-#define DEVICE_MINOR_NUMBER				0
-#define	DRV_AND_DEVICE_ENTRY_NAME		"basic_file_ops_test"
+#define MINOR_NUMBER_FOR_MAIN_FS	0
 
-struct SDeviceStruct{
-	struct cdev		m_cdev;
-}static s_deviceStruct;
 
-static int SimpleOpen (struct inode * a_in, struct file * a_fp);
-static int SimpleOpenRelease (struct inode * a_in, struct file * a_fp);
-static ssize_t SimpleRead(struct file * a_fp, char __user * a_userBuffer, size_t a_size, loff_t * a_pOff);
-static ssize_t SimpleWrite (struct file * a_fp, const char __user * a_userBuffer, size_t a_size, loff_t * a_pOff);
-static long SimpleIoctl (struct file * a_fp, unsigned int a_code, unsigned long a_agument);
+static int		SimpleOpen (struct inode * a_in, struct file * a_fp);
+static int		UserFsRelease (struct inode * a_in, struct file * a_fp);
+static ssize_t	SimpleRead(struct file * a_fp, char __user * a_userBuffer, size_t a_size, loff_t * a_pOff);
+static ssize_t	SimpleWrite (struct file * a_fp, const char __user * a_userBuffer, size_t a_size, loff_t * a_pOff);
+static long		UserFsIoctl (struct file * a_fp, unsigned int a_code, unsigned long a_agument);
 
-static int				s_nMajorNumber = -1;
-static struct class*	s_class = NULL;
+struct class*			g_class = NULL;
+static dev_t			s_firstDevNumber = -1;
+static struct cdev		s_cdev;
 static struct device*	s_pDevice = NULL;
 static int				s_cdevAdded = 0;
 
@@ -32,38 +31,30 @@ static const struct file_operations s_file_operations = {
 	.owner			= THIS_MODULE,
 	.read			= SimpleRead,
 	.write			= SimpleWrite,
-	.unlocked_ioctl	= SimpleIoctl,
-	.compat_ioctl	= SimpleIoctl,
+	.unlocked_ioctl	= UserFsIoctl,
+	.compat_ioctl	= UserFsIoctl,
 	.open			= SimpleOpen,
-	.release		= SimpleOpenRelease,
+	.release		= UserFsRelease,
 };
+
+
+static void CleanupAllOpenUserFS(void)
+{
+	//
+}
 
 
 static int SimpleOpen (struct inode * a_in, struct file * a_fp)
 {
-	struct SDeviceStruct* dev = container_of(a_in->i_cdev, struct SDeviceStruct, m_cdev);
-	pr_notice("inode=%p, fp=%p, privateData=%p, (&s_deviceStruct=%p, &cdev=%p)\n",a_in,a_fp,a_fp->private_data,dev,a_in->i_cdev);
-	pr_notice("a_fp->f_version=%llu\n",a_fp->f_version);
-	++a_fp->f_version;
-	a_fp->private_data = dev;
+	pr_notice("inode=%p, fp=%p, i_private=%p\n",a_in,a_fp,a_in->i_private);
+	a_fp->private_data = NULL;
 	return 0;
 }
-
-
-static int SimpleOpenRelease (struct inode * a_in, struct file * a_fp)
-{
-	pr_notice("inode=%p, fp=%p, privateData=%p, drvData=%p\n",a_in,a_fp,a_fp->private_data,dev_get_drvdata(s_pDevice));
-	return 0;
-}
-
-
 static ssize_t SimpleRead(struct file * a_fp, char __user * a_userBuffer, size_t a_size, loff_t * a_pOff)
 {
 	pr_notice("fp=%p, userBuf=%p, bufSize=%d, ofsetPtr=%p, privateData=%p\n",a_fp,a_userBuffer,(int)a_size,a_pOff,a_fp->private_data)		;
 	return 0;
 }
-
-
 static ssize_t SimpleWrite (struct file * a_fp, const char __user * a_userBuffer, size_t a_size, loff_t * a_pOff)
 {
 	pr_notice("fp=%p, userBuf=%p, bufSize=%d, ofsetPtr=%p, privateData=%p\n",a_fp,a_userBuffer,(int)a_size,a_pOff,a_fp->private_data)		;
@@ -71,35 +62,85 @@ static ssize_t SimpleWrite (struct file * a_fp, const char __user * a_userBuffer
 }
 
 
-static long SimpleIoctl (struct file * a_fp, unsigned int a_code, unsigned long a_agument)
+static int UserFsRelease (struct inode * a_in, struct file * a_fp)
+{
+	pr_notice("inode=%p, fp=%p\n",a_in,a_fp);
+	if(likely(a_fp->private_data)){
+		struct SUserFsDeviceStruct* pData =(struct SUserFsDeviceStruct*)a_fp->private_data;
+		DestroyUserFs(pData);
+		a_fp->private_data = NULL;
+	}
+	return 0;
+}
+
+
+static long UserFsIoctl (struct file * a_fp, unsigned int a_code, unsigned long a_agument)
 {
 	pr_notice("fp=%p, code=%ud, argument=%lud, privateData=%p\n",a_fp,a_code,a_agument,a_fp->private_data)		;
+	
+	switch(a_code){
+	case USER_SPACE_FC_ADD_NEW_IOC:{
+		if(unlikely(a_fp->private_data)){
+			return 1;
+		}
+		else{
+			long ullStrLen;
+			char vcBuffer[128];
+			struct SUserFsDeviceStruct* pData;
+			
+			ullStrLen = strncpy_from_user(vcBuffer,(const char*)a_agument,127);
+			if(ullStrLen<0){
+				pr_err("Unable to get string from user!\n");
+				return -1;
+			}
+			vcBuffer[ullStrLen]=0;
+			pData = CreateNewUserFs(vcBuffer);
+			pr_notice("pData=%p, name=%s\n",pData,vcBuffer);
+			a_fp->private_data = pData;
+		}
+		
+	}break;
+	case USER_SPACE_FC_REMOVE_IOC:
+		if(likely(a_fp->private_data)){
+			struct SUserFsDeviceStruct* pData =(struct SUserFsDeviceStruct*)a_fp->private_data;
+			DestroyUserFs(pData);
+			a_fp->private_data = NULL;
+		}
+		break;
+	default:
+	return -ENOTTY;
+	}
+	
 	return 0;
 }
 
 
 static void CleanupModulePrivate(void)
 {
+	CleanupAllOpenUserFS();
+	CleanFsFunctions();
+	
 	if(s_pDevice && (!IS_ERR(s_pDevice))){
-		device_destroy(s_class, MKDEV(s_nMajorNumber,DEVICE_MINOR_NUMBER));
+		device_destroy(g_class, s_firstDevNumber);
 		//put_device(s_pDevice);
 		//device_unregister(s_pDevice);
 		s_pDevice = NULL;
 	}
 	
 	if(s_cdevAdded){
-		cdev_del(&s_deviceStruct.m_cdev);
+		cdev_del(&s_cdev);
 		s_cdevAdded = 0;
 	}
 	
-	if(s_class && (!IS_ERR(s_class))){
-		class_destroy(s_class);
-		s_class = NULL;
+	if(g_class && (!IS_ERR(g_class))){
+		class_destroy(g_class);
+		g_class = NULL;
 	}
 	
-	if(s_nMajorNumber>=0){
-		unregister_chrdev(s_nMajorNumber,DRV_AND_DEVICE_ENTRY_NAME);
-		s_nMajorNumber = -1;
+	if(s_firstDevNumber>=0){
+		//unregister_chrdev(g_nMajorNumber,USER_FS_DRIVER_NAME);
+		unregister_chrdev_region(s_firstDevNumber,1);
+		s_firstDevNumber = -1;
 	}
 }
 
@@ -107,35 +148,47 @@ static void CleanupModulePrivate(void)
 static int __init hello_world_test_init_module(void)
 {
 	int result;
-	pr_notice("basic_file_ops_test: version 5. Initing module (&s_deviceStruct=%p, &cdev=%p)\n",&s_deviceStruct,&s_deviceStruct.m_cdev);
+	dev_t firstdev;
+	pr_notice("user_space_fs: version 1. Initing module \n");
 	
-	s_nMajorNumber = register_chrdev(0,DRV_AND_DEVICE_ENTRY_NAME,&s_file_operations);
-	if (s_nMajorNumber < 0) {
-		pr_err( "scull: can't get major %d\n",s_nMajorNumber);
+	// s_nMajorNumber = register_chrdev(0,DRV_AND_DEVICE_ENTRY_NAME,&s_file_operations);
+	result = alloc_chrdev_region(&firstdev,MINOR_NUMBER_FOR_MAIN_FS,1,USER_FS_DRIVER_NAME);
+	if (result < 0) {
+		pr_err( "scull: can't get major %d\n",result);
 		return 1;
 	}
-	pr_notice("MajorNumber = %d\n",s_nMajorNumber);
+	s_firstDevNumber = firstdev;
+	pr_notice("Major=%u, Minor=%u\n",MAJOR(s_firstDevNumber),MINOR(s_firstDevNumber));
 	
-	s_class = class_create(THIS_MODULE, DRV_AND_DEVICE_ENTRY_NAME);	
-	if(IS_ERR(s_class)){
+	g_class = class_create(THIS_MODULE, USER_FS_DRIVER_NAME);	
+	if(IS_ERR(g_class)){
 		CleanupModulePrivate();
 		return 2;
-	}
+	}	
 	
-	cdev_init(&s_deviceStruct.m_cdev,&s_file_operations);	
-	result = cdev_add(&s_deviceStruct.m_cdev,MKDEV(s_nMajorNumber,DEVICE_MINOR_NUMBER),1);
+	cdev_init(&s_cdev,&s_file_operations);	
+	
+	result = cdev_add(&s_cdev,s_firstDevNumber,1);
 	if (result){
-		pr_err("Adding error(%d) devno:%d for slot:%dd\n", result, s_nMajorNumber, DEVICE_MINOR_NUMBER);
+		pr_err("Adding error(%d) devno:%d for slot:%dd\n", result, (int)s_firstDevNumber, MINOR_NUMBER_FOR_MAIN_FS);
 		CleanupModulePrivate();
 		return 3;
 	}
 	s_cdevAdded = 1;
 	
-	s_pDevice = device_create(s_class, NULL, MKDEV(s_nMajorNumber,DEVICE_MINOR_NUMBER),(void*)0x1,DRV_AND_DEVICE_ENTRY_NAME);
+	s_pDevice = device_create(g_class, NULL, s_firstDevNumber,(void*)0x1,USER_FS_DEVICE_ENTRY_DIR "!" USER_FS_DEVICE_ENTRY_NAME);
+	pr_notice("!!!!!!!!!!!!!!!!! s_pDevice=%p \n",s_pDevice);
 	if (IS_ERR(s_pDevice)){
 		pr_err("Device creation error!\n");
 		CleanupModulePrivate();
 		return 4;
+	}
+	//device_create_file()
+	
+	if(InitFsFunctions()){
+		pr_err("Unable to init FS functions!\n");
+		CleanupModulePrivate();
+		return 5;
 	}
 	
 	return 0;

@@ -18,7 +18,8 @@ KO_FILES		:= $(mkfile_dir)../../../../sys/driver/$(LINUX_CODE)_$(KVERSION)
 
 
 OBJECT_FILES	:=		\
-	$(SRC_DIR)/tests/drventry_basic_file_ops_test.o
+	$(SRC_DIR)/simple/drventry_user_space_fs.o	\
+	$(SRC_DIR)/simple/fs_funcs_user_space_fs.o
 
 
 $(MODULE_NAME)-objs := $(OBJECT_FILES)
@@ -41,6 +42,7 @@ compile:
 	mv $(MODULE_NAME).ko $(KO_FILES)/.
 
 clean:
+	cp $(mkfile_path) $(mkfile_dir)Makefile
 	rm -f $(OBJECT_FILES)
 	rm -f $(SRC_DIR)/tests/.*.cmd
 	rm -f $(KO_FILES)/$(MODULE_NAME).ko
