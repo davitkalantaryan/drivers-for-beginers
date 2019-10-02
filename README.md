@@ -4,6 +4,7 @@
 	1. 'prj/tests/hello_world_test'		=> The very first hello world project  
 	2. 'prj/tests/init_clean_module_testl'	=> demonstrates init and deinint driver module  
 	3. 'prj/tests/basic_file_ops_test'	=> demonstration of device entry creation  
+	4. 'prj/simple/user_space_fs'		=> demonstration of driver for supporting user space FS  
 	
 
 ## Usefull links  
